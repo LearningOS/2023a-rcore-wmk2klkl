@@ -14,11 +14,13 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::MAX_APP_NUM;
+use crate::config::{MAX_APP_NUM,MAX_SYSCALL_NUM};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_us;
 use lazy_static::*;
 use switch::__switch;
+
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
@@ -51,9 +53,12 @@ lazy_static! {
     /// Global variable: TASK_MANAGER
     pub static ref TASK_MANAGER: TaskManager = {
         let num_app = get_num_app();
+        // 对新增的属性进行额外的初始化
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscall_times:[0;MAX_SYSCALL_NUM],
+            start_time:0,
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -94,6 +99,7 @@ impl TaskManager {
     fn mark_current_suspended(&self) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
+        // println!("task {} suspended", current);
         inner.tasks[current].task_status = TaskStatus::Ready;
     }
 
@@ -101,6 +107,7 @@ impl TaskManager {
     fn mark_current_exited(&self) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
+        // println!("task {} exited", current);
         inner.tasks[current].task_status = TaskStatus::Exited;
     }
 
@@ -108,8 +115,9 @@ impl TaskManager {
     ///
     /// In this case, we only return the first `Ready` task in task list.
     fn find_next_task(&self) -> Option<usize> {
-        let inner = self.inner.exclusive_access();
+        let  inner = self.inner.exclusive_access();
         let current = inner.current_task;
+
         (current + 1..current + self.num_app + 1)
             .map(|id| id % self.num_app)
             .find(|id| inner.tasks[*id].task_status == TaskStatus::Ready)
@@ -122,6 +130,10 @@ impl TaskManager {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
+            //维护更新
+            if inner.tasks[next].start_time == 0{
+                inner.tasks[next].start_time = get_time_us();
+            }
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -131,12 +143,55 @@ impl TaskManager {
                 __switch(current_task_cx_ptr, next_task_cx_ptr);
             }
             // go back to user mode
+            // use crate::board::QEMUExit;
+            // crate::board::QEMU_EXIT_HANDLE.exit_success();
         } else {
             panic!("All applications completed!");
         }
     }
+    // 对新增 调用状态和时间进行查询
+    fn get_current_start_time(&self)-> usize{
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].start_time
+    }
+
+    fn get_current_status(&self) -> TaskStatus {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].task_status
+    }
+    
+    // 对系统调用进行处理
+    // 维护调用次数
+    fn deal_syscall_time(&self,syscall_id:usize){
+        let  mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+
+        inner.tasks[current].syscall_times[syscall_id] +=1;
+    }
+    // 桶计数
+    fn get_syscall_time(&self)->[u32;500] {
+        let  inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+
+        inner.tasks[current].syscall_times
+    }
+}
+pub fn deal_syscall_time(syscell_id:usize) {
+    TASK_MANAGER.deal_syscall_time(syscell_id);
 }
 
+pub fn get_syscall_time() ->[u32;500] {
+    TASK_MANAGER.get_syscall_time()
+}
+////
+pub fn get_current_start_time() -> usize {
+    TASK_MANAGER.get_current_start_time()
+}
+pub fn get_current_status() -> TaskStatus {
+    TASK_MANAGER.get_current_status()
+}
 /// Run the first task in task list.
 pub fn run_first_task() {
     TASK_MANAGER.run_first_task();

@@ -13,6 +13,9 @@ easy-fs/target/*
 easy-fs-fuse/Cargo.lock
 easy-fs-fuse/target/*
 tools/
+ci-user
+qemu-7.0.0
+qemu-7.0.0.tar.xz
 pushall.sh
 *.bak
 
