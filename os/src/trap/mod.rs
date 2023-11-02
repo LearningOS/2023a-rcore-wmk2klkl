@@ -27,6 +27,7 @@ use riscv::register::{
 global_asm!(include_str!("trap.S"));
 
 /// Initialize trap handling
+// 确保发生异常的时候能转到__alltraps 函数
 pub fn init() {
     extern "C" {
         fn __alltraps();

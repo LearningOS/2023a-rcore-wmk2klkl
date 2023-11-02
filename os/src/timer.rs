@@ -20,16 +20,20 @@ pub fn get_time() -> usize {
 /// get current time in milliseconds
 #[allow(dead_code)]
 pub fn get_time_ms() -> usize {
+    // println!("get_time_ms具体时间{:?}",time::read() / (CLOCK_FREQ / MSEC_PER_SEC));
+    // println!("print the time::read:{:?}",time::read());
     time::read() / (CLOCK_FREQ / MSEC_PER_SEC)
 }
 
 /// get current time in microseconds
 #[allow(dead_code)]
 pub fn get_time_us() -> usize {
-    time::read() * MICRO_PER_SEC / (CLOCK_FREQ)
+    // println!("get_time_us具体时间{:?}",time::read() * MICRO_PER_SEC / CLOCK_FREQ);
+    time::read() * MICRO_PER_SEC / CLOCK_FREQ
 }
 
 /// Set the next timer interrupt
+// 在当前时间下加上一个时间间隔
 pub fn set_next_trigger() {
     set_timer(get_time() + CLOCK_FREQ / TICKS_PER_SEC);
 }

@@ -51,6 +51,7 @@ fn clear_bss() {
         fn sbss();
         fn ebss();
     }
+    // 给全部变量分配0
     unsafe {
         core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
             .fill(0);
@@ -96,13 +97,16 @@ fn kernel_log_info() {
 #[no_mangle]
 /// the rust entry-point of os
 pub fn rust_main() -> ! {
+    // println!("你好");
     clear_bss();
     kernel_log_info();
     heap_alloc::init_heap();
     trap::init();
     loader::load_apps();
+    // 时钟中断支持
     trap::enable_timer_interrupt();
-    timer::set_next_trigger();
+    timer::set_next_trigger();  //设置下一次触发中断的时间
+
     task::run_first_task();
     panic!("Unreachable in rust_main!");
 }
